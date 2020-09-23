@@ -20,7 +20,8 @@ definesURL = "defines.html"
 eventsURL = "events.html"
 commonURL = "Common.html"
 useCached = 1
-cacheDir = "cached"
+cacheDir = None
+formatOutput = False
 
 modeTranslation = {
     "[Read-only]" : "[R]",
@@ -29,10 +30,13 @@ modeTranslation = {
 }
 
 bracketRe = re.compile("[{(]")
+whitespaceRe = re.compile("^\\s+$")
 
 commonAttributes = {}
 
 lineBreak = "  \n"
+
+listCharacters = ["*", "+", "-"]
 
 class SourceRetriever:
 
@@ -59,7 +63,7 @@ class SourceRetriever:
                 self.responses.put((url, None, Exception("Could not get source for " + url)))
                 break
             result = resp.read()
-            self.responses.put((url, result.decode(encoding="utf8"), None))
+            self.responses.put((url, result.decode(encoding = "utf8"), None))
             time.sleep(1)
 
 
@@ -71,7 +75,7 @@ class SourceRetriever:
             return result
         cachedPath = os.path.join(cacheDir, url)
         if useCached and os.path.exists(cachedPath):
-            with open(cachedPath, 'r', encoding="utf8") as r:
+            with open(cachedPath, 'r', encoding = "utf8") as r:
                 soup = BeautifulSoup(r.read(), "html.parser")
                 self.docs[url] = soup
                 return soup
@@ -88,7 +92,7 @@ class SourceRetriever:
             self.docs[response[0]] = soup
             if useCached:
                 cachedPath = os.path.join(cacheDir, response[0])
-                with open(cachedPath, 'w', encoding="utf8") as w:
+                with open(cachedPath, 'w', encoding = "utf8") as w:
                     w.write(response[1])
             if response[0] == url:
                 return soup
@@ -108,12 +112,32 @@ class SourceRetriever:
 def prettify(f, soup):
     with open("p" + f, 'wb') as w:
         soup.encode("utf8")
-        w.write(soup.prettify(encoding="utf8"))
+        w.write(soup.prettify(encoding = "utf8"))
 
-def handleDocString(node, sep = " "):
+def docMapFunction(x, isList, listChar, doIndent = False, indent = 0):
+    indentation = ""
+    if doIndent:
+        indentation = " " * indent
+    if isList:
+        return indentation + listCharacters[listChar] + " " + x
+    return indentation + x
+
+def emphasis(s):
+    return "_" + s + "_"
+
+def strong(s):
+    return "**" + s + "**"
+
+def code(s):
+    return '````' + s + '````'
+
+def handleDocString(node, sep = " ", isList = False, listChar = -1, maxDepth = None, currentDepth = 1, doIndent = False, indent = 0):
+    if maxDepth and currentDepth > maxDepth:
+        return None
     children = node.children
     if not children:
         return node.get_text(strip = True)
+    nextDepth = currentDepth + 1
     result = []
     for child in node.children:
         name = child.name
@@ -121,29 +145,33 @@ def handleDocString(node, sep = " "):
             result.append(child.string.strip())
             continue
         if name == "code":
-            result.append("````" + handleDocString(child) + "````")
+            result.append(code(handleDocString(child, maxDepth = 1)))
         elif name == "em":
-            result.append("_" + handleDocString(child) + "_")
+            result.append(emphasis(handleDocString(child, maxDepth = 1)))
         elif name == "strong":
-            result.append("**" + handleDocString(child) + "**")
+            result.append(strong(handleDocString(child, maxDepth = 1)))
         elif name == "br":
             result.append(lineBreak)
         elif name == "span":
-            result.append(handleDocString(child))
+            result.append(handleDocString(child, listChar = listChar, maxDepth = maxDepth))
         elif name == "a":
             result.append("[" + child.get_text(strip = True) + "](" + apiHome + child["href"] + ")")
         elif name == "ul":
-            result.append(handleDocString(child))
+            nextListChar = (listChar + 1) % len(listCharacters)
+            t = handleDocString(child, sep = lineBreak, isList = True, listChar = nextListChar,
+                            maxDepth = maxDepth, currentDepth = nextDepth, indent = indent + 2, doIndent = True)
+            if t:
+                result.append(lineBreak + t + lineBreak)
         elif name == "li":
-            result.append(handleDocString(child))
+            result.append(handleDocString(child, listChar = listChar, maxDepth = maxDepth, currentDepth = nextDepth, indent = indent))
         elif name == "p":
-            result.append(handleDocString(child))
+            result.append(handleDocString(child, listChar = listChar, maxDepth = maxDepth) + lineBreak)
         elif name == "div":
-            result.append(handleDocString(child))
+            result.append(handleDocString(child, listChar = listChar, maxDepth = maxDepth, currentDepth = nextDepth, indent = indent))
         else:
-            print(child)
+            print(child.prettify())
             raise Exception("Unknown html tag: " + name)
-    return sep.join(filter(lambda x: x, result))
+    return sep.join(map(lambda x: docMapFunction(x, isList, listChar, doIndent, indent), filter(lambda x: x and not whitespaceRe.match(x), result)))
 
 def extractIdAndP(data, allDefines, idString = None):
     if idString:
@@ -294,9 +322,7 @@ def parseClass(clname, soup):
     content = element.find("div", "element-content", recursive = False)
     if content:
         for p in content.findChildren("p", recursive = False) or ():
-            text = handleDocString(p)
-            if text:
-                classDoc.append(text)
+            classDoc.append(handleDocString(p))
         notes = element.findChild("div", "notes", recursive = False)
         if notes:
             for note in notes.findChildren("div", "note", recursive = False):
@@ -313,7 +339,6 @@ def parseClass(clname, soup):
         doc = []
         args = {}
         name = row.findChild("span", "element-name").get_text(strip = True)
-
         m = bracketRe.search(name)
         if m:
             name = name[ : m.start()]
@@ -323,18 +348,18 @@ def parseClass(clname, soup):
         modeString = None
 
         elementContent = row.findChild("div", "element-content", recursive = False)
-        if elementContent:
-            t = handleDocString(elementContent, lineBreak)
-            if t:
-                doc.append(t)
 
         modeNode = row.find("span", "attribute-mode")
         if modeNode:
             typeNode = row.findChild("span", "attribute-type")
+            if elementContent:
+                doc.append(handleDocString(elementContent))
+                #print(1, doc[-1])
             if typeNode:
                 typeString = typeNode.findChild("span", "param-type").get_text(strip = True)
             modeString = modeTranslation[modeNode.get_text(strip = True)]
         else:
+            doc.append(handleDocString(elementContent, maxDepth = 1))
             returnSpan = row.findChild("span", "return-type")
             if returnSpan:
                 returnText = returnSpan.get_text(strip = True)
@@ -348,9 +373,13 @@ def parseClass(clname, soup):
                 headerText = header.get_text(strip = True)
 
                 if headerText == "Parameters":
-                    #Should I add parameters to the general doc?
+                    # Since the Factorio API Autocomplete extension does not display args at all,
+                    # the parameter documentation will be added to the function documentation
+                    doc.append(strong(headerText))
                     dc = detail.find("div", "detail-content")
+                    count = 0
                     for div in dc.findChildren("div", recursive = False):
+                        count += 1
                         arg = {}
                         if not div.findChild("span", "param-name"):
                             continue
@@ -364,12 +393,19 @@ def parseClass(clname, soup):
                         if t:
                             arg["doc"] = t
                         args[argName] = arg
+                    isList = False
+                    sep = ""
+                    if count > 1:
+                        isList = True
+                        sep = lineBreak
+                    doc.append(handleDocString(dc, isList = isList, listChar = 0, sep = sep))
+                    doc.append(lineBreak)
                 elif headerText == "Return value":
-                    doc.append("**Return value**  ")
+                    doc.append(strong(headerText))
                     returnDocNode = header.find_next_sibling("div", "detail-content")
                     doc.append(handleDocString(returnDocNode))
                 elif headerText == "See also":
-                    doc.append("**See also**")
+                    doc.append(strong(headerText))
                     doc.append(handleDocString(detail))
                 else:
                     raise Exception("Unknown headerText: " + headerText)
@@ -387,19 +423,18 @@ def parseClass(clname, soup):
             if args:
                 prop["args"] = args
             prop["type"] = "function"
-        t = lineBreak.join(doc)
+        t = lineBreak.join(filter(lambda x: x, doc))
         if t:
             prop["doc"] = t
 
         properties[name] = prop
 
-    t = lineBreak.join(classDoc)
+    t = lineBreak.join(filter(lambda x: x, classDoc))
     if t:
         result["doc"] = t
 
     result["properties"] = properties
 
-    #TODO: add extends to doc
     bl = soup.find("div", "brief-listing", id = clname + ".brief")
     inherits = []
     for inherit in bl.findChildren("div", "brief-inherited"):
@@ -412,6 +447,8 @@ def parseClasses(classes, retriever):
     classFilter = [
         #"LuaControlBehavior",
         #"LuaEntityPrototype",
+        #"LuaGuiElement",
+        #"LuaEquipment",
     ]
 
     filtered = {}
@@ -450,7 +487,7 @@ def parseClasses(classes, retriever):
     return result
 
 def parseCommon(soup):
-    bl = soup.find("div", "brief-listing", id="Common.brief")
+    bl = soup.find("div", "brief-listing", id = "Common.brief")
     table = bl.findChild("table", recursive = False)
     trs = table.findChildren("tr")
     for tr in trs:
@@ -507,8 +544,9 @@ def go():
     sortKeys = False
     indent = 0
 
-    #sortKeys = True
-    #indent = 4
+    if formatOutput:
+        sortKeys = True
+        indent = 4
 
     with open("defines.json", "w", encoding = "utf8") as definesJsonFile:
         json.dump(defines, definesJsonFile, sort_keys = sortKeys, indent = indent)

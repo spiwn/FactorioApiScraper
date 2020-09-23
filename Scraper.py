@@ -7,6 +7,8 @@ import json
 import threading
 import queue
 import time
+import argparse
+import sys
 
 httpPrefix = "https://"
 baseURL = "lua-api.factorio.com"
@@ -515,5 +517,9 @@ def go():
         json.dump(classesOutput, classesJsonFile, sort_keys = sortKeys, indent = indent)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--cache", type=str, help="Specify a folder to use as a cache", default="cached", action="store")
+    arguments = parser.parse_args()
+    cacheDir = arguments.cache
     go()
     print("Done")

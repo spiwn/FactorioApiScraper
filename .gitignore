@@ -1,2 +1,4 @@
 *.json
 cached
+__pycache__
+output

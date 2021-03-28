@@ -1,5 +1,5 @@
 from common import *
-from .Attribute import parse_attribute_doc
+from parsing.Attribute import parse_attribute_doc
 import re
 
 #Inherited from LuaControlBehavior: get_circuit_network, type, entity
@@ -8,9 +8,57 @@ inheritsRe = re.compile("Inherited from (?P<clname>\\w+)\\s*:\\s*(?P<attributes>
 attributesRe = re.compile("\\s*,\\s*")
 bracketRe = re.compile("[{(]")
 
-def _parseClass(co, soup, context):
-    clazz = context.classes[co]
+def getReturnTypes(children, context):
+    types = []
+    valueType = None
+    for e, child in enumerate(children):
+        if isinstance(child, str):
+            stripped = child.strip()
+            if "→" == stripped:
+                continue
+            if stripped == "dictionary":
+                valueType = Types.Table
+                types.append(getReturnTypes(tuple(children[e + 1].children), context))
+                types.append(getReturnTypes(tuple(children[e + 3].children), context))
+                break
+            if "array of" == stripped:
+                valueType = Types.Array
+            elif "or" == stripped:
+                #print("zzz", context.breadcrumbs)
+                valueType = Types.Union
+            elif stripped in {"function()", "function"}:
+                valueType = Types.Function
+                break
+            elif "function(" == stripped:
+                #print("c2", children[e + 1:])
+                #TODO: I could not find any meaningful way of documenting these parameters
+                valueType = Types.Function
+                break
+            elif stripped:
+                #TODO: these are mostly exceptions
+                #print("foo", stripped, context.breadcrumbs)
+                types.append(stripped)
+
+            else:
+                continue
+
+        elif child.name == "span" and "param-type" in child.get("class"):
+            types.append(getReturnTypes(list(child.children), context))
+        elif child.name == "a":
+            types.append(child.get_text(strip = True))
+        else:
+            #TODO: check if something strange goes through here
+            types.append(child.get_text(strip = True))
+    if valueType is None and len(types) == 1:
+        return types[0]
+    return ObjectType(
+        type = valueType,
+        value = types
+    )
+
+def _parseClass(clazz, soup, context):
     clName = clazz.name
+    context.breadcrumbs.append(clName)
     #print(clName)
 
     attributeRe = re.compile(clName + "\\.\\w+")
@@ -114,10 +162,14 @@ def _parseClass(co, soup, context):
         match = bracketRe.search(name)
         if match:
             name = name[ : match.start()]
-        returnType = None
+
+        context.breadcrumbs.append(name)
+
         returnDesc = None
-        typeString = None
         modeString = None
+
+        returnType = None
+        attributeType = None
 
         elementContent = row.findChild("div", "element-content", recursive = False)
 
@@ -128,13 +180,23 @@ def _parseClass(co, soup, context):
                 attributeDoc.append(md.handleDocString(elementContent))
                 #print(1, doc[-1])
             if typeNode:
-                typeString = typeNode.findChild("span", "param-type").get_text(strip = True)
+                attributeType = getReturnTypes(tuple(typeNode.findChild("span", "param-type").children), context)
+            else:
+                #TODO: temporary workaround
+                attributeType = "any"
             modeString = modeTranslation[modeNode.get_text(strip = True)]
         else:
             attributeDoc.append(md.handleDocString(elementContent, maxDepth = 1))
             returnSpan = row.findChild("span", "return-type")
             if returnSpan:
-                returnType = returnSpan.get_text(strip = True)
+                pt = returnSpan.findChild("span", "param-type", recursive = False)
+                if name == "calculate_tile_properties":
+                    #print("asd")
+                    #Just for testing
+                    pass
+                returnType = getReturnTypes(tuple(pt.children), context)
+
+            returnValueDetailFound = False
             for detail in elementContent.findChildren("div", "detail", recursive = False) or ():
                 header = detail.findChild("div", "detail-header")
                 if header is None:
@@ -154,10 +216,14 @@ def _parseClass(co, soup, context):
                             continue
 
                         argName = div.findChild("span", "param-name").get_text(strip = True)
-                        typeText = None
+                        parameterType = None
                         typeNode = div.findChild("span", "param-type")
                         if typeNode:
-                            typeText = typeNode.get_text(strip = True)
+                            parameterType = getReturnTypes(tuple(typeNode.children), context)
+                        else:
+                            parameterType = "any"
+                            #TODO: temporary workaround
+
                         parameterDoc = parse_attribute_doc(div)
 
                         if parameterDoc:
@@ -168,18 +234,20 @@ def _parseClass(co, soup, context):
 
                         args[argName] = Parameter(
                             name = argName,
-                            type = typeText,
+                            type = parameterType,
                             desc = parameterDoc)
                 elif headerText == "Return value":
+                    returnValueDetailFound = True
                     returnDesc = md.handleDocString(header.find_next_sibling("div", "detail-content"))
                 elif headerText == "See also":
                     attributeDoc.append(md.strong(headerText))
                     attributeDoc.append(md.handleDocString(detail))
                 else:
                     raise Exception("Unknown headerText: " + headerText)
+            if not returnValueDetailFound:
+                #print(returnType)
+                pass
 
-
-        attribute = None
         if modeNode:
             tempDoc = " ".join(filter(lambda x: x, attributeDoc))
             attribute = Attribute(
@@ -187,13 +255,13 @@ def _parseClass(co, soup, context):
                 shortDesc = shortDescriptions.get(name),
                 desc = tempDoc,
                 mod = modeString,
-                type = typeString)
+                type = attributeType)
         else:
             tempDoc = " ".join(filter(lambda x: x, attributeDoc))
             returnObject = None
             if returnType:
                 returnObject = Attribute(
-                    name = returnType,
+                    type = returnType,
                     desc = returnDesc)
             attribute = FunctionObject(
                 name = name,
@@ -203,6 +271,7 @@ def _parseClass(co, soup, context):
                 parameters = args)
 
         attributes[name] = attribute
+        context.breadcrumbs.pop()
 
     clazz.attributes = attributes
 
@@ -232,4 +301,29 @@ def _parseClass(co, soup, context):
     #print("qwe", inherits)
 
 def parse_class(className, soupObject, context):
-    _parseClass(className, soupObject, context)
+    context.breadcrumbs.clear()
+    context.breadcrumbs.append("class")
+    clazz = context.classes[className]
+    _parseClass(clazz, soupObject, context)
+
+def main():
+    #className = "LuaSurface"
+    className = "LuaBootstrap"
+    from retriever import SourceRetriever
+    retriever = SourceRetriever(
+        baseURL,
+        useCached=True,
+        cacheDir=cacheDir,
+        suffix=suffix)
+    context = Context(retriever)
+    co = ClassObject(
+        name = className,
+        shortDesc = "Testing class",
+        url = apiHome + className + ".html"
+    )
+    so = retriever.get(className + ".html")
+
+    _parseClass(co, so, context)
+
+if __name__ == '__main__':
+    main()

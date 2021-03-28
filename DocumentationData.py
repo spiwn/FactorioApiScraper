@@ -1,9 +1,16 @@
 from collections import OrderedDict
-from enum import Flag, auto
+from enum import Flag, auto, Enum
 
 class Flags(Flag):
     Struct = auto()
     Dummy = auto()
+
+class Types(Enum):
+    Simple = auto()
+    Array = auto()
+    Union = auto()
+    Table = auto()
+    Function = auto()
 
 class DataMeta(type):
     def __new__(mcs, name, bases, d):
@@ -53,6 +60,12 @@ class DocObject(metaclass = DataMeta):
 
 class DefinesGroup(DocObject, metaclass = DataMeta):
     defines = OrderedDict
+    def __init__(self, **kwargs):
+        pass
+
+class ObjectType(metaclass = DataMeta):
+    value = None
+    type = None
     def __init__(self, **kwargs):
         pass
 

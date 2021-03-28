@@ -1,9 +1,3 @@
-from bs4 import BeautifulSoup
-from pathlib import Path
-import os
-import re
-import argparse
-
 from retriever import SourceRetriever
 from parsing.AllClassesPage import parse_all_classes
 from parsing.CommonPage import parse_common
@@ -16,15 +10,7 @@ from common import *
 
 import DocFormatter
 
-httpPrefix = "https://"
-baseURL = "lua-api.factorio.com"
-suffix = "/latest/"
-apiHome = httpPrefix + baseURL + suffix
-md.setAnchorBase(apiHome)
-
 useCachedOverride = True
-
-outputDir = "output"
 
 def prettify(f, soup):
     with open("p" + f, 'wb') as w:
@@ -57,9 +43,16 @@ def parseClasses(context):
         parse_class(k, cl, context)
 
 def scrape(retriever):
-    startingUrls = [commonURL, classesURL, definesURL, eventsURL, conceptsURL, indexURL]
+    startingUrls = [
+        commonURL,
+        classesURL,
+        definesURL,
+        eventsURL,
+        conceptsURL,
+        indexURL]
     for url in startingUrls:
-        retriever.enqueue(url)
+        #retriever.enqueue(url)
+        pass
 
     context = Context(retriever)
 
@@ -73,11 +66,7 @@ def scrape(retriever):
 
     return context
 
-def clear_cache(cacheDir):
-    cachePath = Path(cacheDir)
-    for file in cachePath.glob("*.html"):
-        os.remove(file)
-        pass
+
 
 def store_intermediate(context, outputDirPath):
     del context.retriever
@@ -86,20 +75,9 @@ def store_intermediate(context, outputDirPath):
         pickle.dump(context, w)
 
 def go():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--cache", type =str, help = "Specify a folder to use as a cache", action = "store")
-    parser.add_argument("--clear", help = "remove previously saved html files", action = "store_true")
-    parser.add_argument("--intermediate", help = "store the intermediate representation", action = "store_true")
-    parser.add_argument("--skip_generation", help = "skip generating the output", action = "store_true")
-    arguments = parser.parse_args()
-    cacheDir = arguments.cache or "cached"
-
-    if arguments.clear:
-        clear_cache(cacheDir)
-
     context = scrape(SourceRetriever(
         baseURL,
-        useCached = useCachedOverride,
+        useCached = useCachedOverride or arguments.ca,
         cacheDir = cacheDir,
         suffix = suffix))
 
@@ -111,6 +89,7 @@ def go():
 
     if not arguments.skip_generation:
         DocFormatter.formatDocumentation(context, outputDirPath)
+        pass
 
     print("Done")
 

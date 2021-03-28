@@ -22,7 +22,49 @@ def writeFullDesc(shortDesc, desc, w):
     if desc:
         writeDesc(desc, w)
 
-counter = [0, 0]
+counter = [0, 0, 0, 0]
+
+def writeObjectType(objectType, w):
+    if objectType is None:
+        w.write("any")
+    if isinstance(objectType, str):
+        w.write(objectType)
+        return
+    if objectType.value is None and objectType.type is None:
+        counter[3] += 1
+        w.write("any")
+        return
+    if objectType.type == Types.Function:
+        #TODO: Search for a meaningful way to document these - so far there is none
+        w.write("fun():nil")
+        return
+    if objectType.type is None or objectType.type == Types.Simple:
+        if isinstance(objectType.value, list):
+            writeObjectType(objectType.value[0], w)
+        else:
+            #TODO: count and remove
+            writeObjectType(objectType.value, w)
+        return
+    if objectType.type == Types.Union:
+        notFirst = False
+        for t in objectType.value:
+            if notFirst:
+                w.write("|")
+            writeObjectType(t, w)
+            notFirst = True
+        return
+    if objectType.type == Types.Array:
+        writeObjectType(objectType.value[0], w)
+        w.write("[]")
+        return
+    if objectType.type == Types.Table:
+        w.write("table<")
+        writeObjectType(objectType.value[0], w)
+        w.write(",")
+        writeObjectType(objectType.value[1], w)
+        w.write(">")
+        return
+    raise Exception("Unknown object type: " + objectType.type)
 
 def writeClass(clazz, w):
     escapedName = escapeName(clazz.name)
@@ -51,11 +93,7 @@ def writeClass(clazz, w):
             w.write("@field ")
             w.write(attribute.name)
             w.write(" ")
-            if attribute.type is None:
-                counter[1] += 1
-                print(escapedName, attribute.name)
-            else:
-                w.write(attribute.type)
+            writeObjectType(attribute.type, w)
             w.write("\n")
 
     #maybe the local variable name has a prefix
@@ -74,26 +112,25 @@ def writeClass(clazz, w):
                 for _, parameter in attribute.parameters.items():
                     w.write("---@param ")
                     w.write(parameter.name)
+                    if parameter.optional:
+                        w.write("?")
                     w.write(" ")
-                    if parameter.type is None:
-                        counter[0] += 1
-                        w.write("any")
-                    else:
-                        w.write(parameter.type)
+                    writeObjectType(parameter.type, w)
                     if parameter.desc or parameter.shortDesc:
                         w.write(" ")
                         w.write(parameter.desc or parameter.shortDesc)
                     w.write("\n")
                     w.write("---\n")
-            ro = attribute.returnObject
-            if ro:
-                if not isinstance(ro, str) and attribute.returnObject.desc:
+            returnObject = attribute.returnObject
+            if returnObject:
+                if not isinstance(returnObject, str) and attribute.returnObject.desc:
                     writeDesc(attribute.returnObject.desc, w)
                 w.write("---@return ")
-                if isinstance(ro, str):
-                    w.write(ro)
+                if isinstance(returnObject, str):
+                    #TODO: all returnObjects should be instances of Attribute
+                    w.write(returnObject)
                 else:
-                    w.write(attribute.returnObject.name)
+                    writeObjectType(attribute.returnObject.type, w)
                 w.write("\n")
             w.write(escapedName)
             w.write(".")

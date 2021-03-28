@@ -26,6 +26,44 @@ def _getEventParamType(element):
 
     return None
 
+def parseAttribute(d, idText, event):
+    paramName = d.findChild("span", "param-name", recursive = False).get_text(strip = True)
+    optional = False
+    desc = None
+
+    paramType = _getEventParamType(d)
+    if paramType is None:
+        if idText == "on_permission_group_edited" and paramName == "action":
+            paramType = "defines.input_action"
+        elif paramName == "selected_prototype":
+            # TODO: Custom Input Events.selected_prototype
+            fl = d.findChild("ul", "field-list")
+            attributes = OrderedDict()
+            for li in fl.findChildren(recursive = False):
+                temp = parseAttribute(li, idText, event)
+                attributes[temp.name] = temp
+            paramType = idText + "_selected_prototype"
+            event.contains.append(
+                ClassObject(
+                    name = paramType,
+                    flags = Flags.Dummy,
+                    attributes = attributes))
+        else:
+            raise Exception("Unhandled event parameter")
+
+    if d.findChild("span", "opt", recursive = False):
+        optional = True
+
+    attributeDoc = parse_attribute_doc(d)
+    if attributeDoc:
+        desc = " ".join(attributeDoc)
+    return Attribute(
+        name = paramName,
+        type = ObjectType(value = paramType),
+        optional = optional,
+        desc = desc)
+
+
 allEventsKey = "All events"
 customInputsKey = "Custom Input Events"
 def _parseEvents(soup, context):
@@ -90,31 +128,8 @@ def _parseEvents(soup, context):
         detail = element.findChild("div", "detail-content")
         if detail is not None:
             for d in detail.findChildren("div", recursive = False):
-                paramName = d.findChild("span", "param-name", recursive = False).get_text(strip = True)
-                optional = False
-                desc = None
-
-                paramType = _getEventParamType(d)
-                if paramType is None:
-                    if idText == "on_permission_group_edited" and paramName == "action":
-                        paramType = "defines.input_action"
-                    elif paramName == "selected_prototype":
-                        #TODO: Custom Input Events.selected_prototype
-                        pass
-                    else:
-                        raise Exception("Unhandled event parameter")
-
-                if d.findChild("span", "opt", recursive = False):
-                    optional = True
-
-                attributeDoc = parse_attribute_doc(d)
-                if attributeDoc:
-                    desc = " ".join(attributeDoc)
-                attributes[paramName] = Attribute(
-                    name = paramName,
-                    type = paramType,
-                    optional = optional,
-                    desc = desc)
+                temp = parseAttribute(d, idText, event)
+                attributes[temp.name] = temp
 
         if idText != allEventsKey:
             event.contains.append(

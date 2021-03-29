@@ -54,7 +54,10 @@ def writeObjectType(objectType, w):
             notFirst = True
         return
     if objectType.type == Types.Array:
-        writeObjectType(objectType.value[0], w)
+        if type(objectType.value) in (list, tuple):
+            writeObjectType(objectType.value[0], w)
+        else:
+            writeObjectType(objectType.value, w)
         w.write("[]")
         return
     if objectType.type == Types.Table:
@@ -220,9 +223,34 @@ def writeGlobalClasses(context, directory):
         w.write("\n")
     pass
 
+def writeAliasType(alias, w):
+    if alias.shortDesc or alias.desc:
+        writeFullDesc(alias.shortDesc, alias.desc, w)
+    w.write("---@alias ")
+    w.write(alias.name)
+    w.write(" ")
+    writeObjectType(alias.type, w)
+    w.write("\n")
+    pass
+
+def writeConceptTypes(context, directory):
+    with open(directory.joinpath("concepts.lua"), 'w', encoding = encoding) as w:
+        writeMetaHeader(w)
+        for k, v in context.conceptTypes.items():
+            if isinstance(v, ClassObject):
+                writeClass(v, w)
+            elif isinstance(v, AliasType):
+                writeAliasType(v, w)
+            else:
+                raise Exception()
+            w.write("\n")
+        w.write("\n")
+    pass
+
 def formatDocumentation(context : Context, directory):
     writeDefines(context, directory)
     writeClasses(context, directory)
+    writeConceptTypes(context, directory)
     writeGlobalClasses(context, directory)
     print(counter)
 

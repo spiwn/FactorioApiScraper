@@ -1,4 +1,7 @@
 from common import *
+import re
+
+spaceRe = re.compile(" {2,}")
 
 def parse_attribute_doc(element):
     attributeDoc = []
@@ -12,5 +15,6 @@ def parse_attribute_doc(element):
             continue
         temp = md.handleDocString(child)
         if temp:
-            attributeDoc.append(temp.strip(": \n"))
+            attributeDoc.append(spaceRe.sub(" ", temp.strip(": \n")))
+
     return attributeDoc

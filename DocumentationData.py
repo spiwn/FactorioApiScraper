@@ -41,11 +41,25 @@ class DataMeta(type):
                 raise Exception("Unknown attribute: " + k)
             object.__setattr__(self, k, v)
 
+        def strMethod(self):
+            result = [name, "("]
+            for k in allAttributes:
+                v = getattr(self, k)
+                if v:
+                    result.append(k)
+                    result.append("=")
+                    result.append(str(v))
+            result.append(")")
+            return " ".join(result)
+
+            return name + " " + " ".join((k + "=" + getattr(self, k) for k in allAttributes))
+
         for k in currentAttributes:
             d.pop(k)
 
         d["__init__"] = init
         d["__setattr__"] = setter #TODO: comment this out, it is just for development/testing
+        d["__str__"] = strMethod
         result = type(name, bases, d)
         result.__allAttributes = allAttributes
         return result
@@ -101,6 +115,7 @@ class ClassObject(DocObject, metaclass = DataMeta):
     inherits = None
     parents = None
     flags = lambda: Flags(0)
+    #TODO: Rename
     _attributes = ("attributes", "inherits", "flags", "parents")
     def __init__(self, **kwargs):
         pass
@@ -113,3 +128,8 @@ class ClassObject(DocObject, metaclass = DataMeta):
 
     def hasFlag(self, flag):
         return bool(self.flags & flag)
+
+class AliasType(DocObject, metaclass = DataMeta):
+    type = None
+    def __init(self, **kwargs):
+        pass

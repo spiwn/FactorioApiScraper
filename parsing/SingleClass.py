@@ -56,85 +56,54 @@ def getReturnTypes(children, context):
         value = types
     )
 
-def _parseClass(clazz, soup, context):
-    clName = clazz.name
-    context.breadcrumbs.append(clName)
-    #print(clName)
-
-    attributeRe = re.compile(clName + "\\.\\w+")
-    element = soup.find("div", "element", id = clName)
-
+def parseDescription(soup, element, className):
     classDoc = []
     h1 = soup.findChild("h1")
-    desc = soup.find("body").find("div", "brief-description")
-    if h1 and h1.get_text(strip = True) == clName and desc:
-        hasChildren = False
-        for e in desc.children:
-            hasChildren = True
-            if isinstance(e, str):
-                classDoc.append(e)
-            else:
-                if e.name == "p":
-                    classDoc.append(md.handleDocString(e))
-                elif e.name == "ul":
-                    classDoc.append(md.handleDocString(e, isList = True, listChar = 0, sep = md.lineBreak))
-                elif e.name == "div":
-                    classes = e.get("class")
-                    if classes:
-                        if "example" in classes:
-                            classDoc.append(md.handleDocString(e))
-                        elif "notes" in classes:
-                            classDoc.append(md.handleDocString(e))
-                            pass
-                        else:
-                            print("Unknown div class", classes)
-                    else:
-                        print("Div does not have a class")
-                else:
-                    print("Unknown element", e.name)
-        if not hasChildren:
-            print("No description", clName)
+    desc = soup.find("body").findChild("div", "brief-description", recursive=False)
+
+    if h1 and h1.get_text(strip = True) == className and desc:
+        root = desc
     else:
-        content = element.find("div", "element-content", recursive = False)
-        if content:
-            for e in content.children:
-                if isinstance(e, str):
-                    classDoc.append(e)
-                else:
-                    if e.name == "p":
-                        classDoc.append(md.handleDocString(e))
-                    elif e.name == "div":
-                        classes = e.get("class")
-                        if classes:
-                            if "notes" in classes:
-                                classDoc.append(md.handleDocString(e))
-                            elif "element" in classes:
-                                pass
-                            else:
-                                print("Unknown div class", classes)
-                        else:
-                            print("Div does not have a class")
-                    else:
-                        print("Unknown element", e.name)
+        root = element.find("div", "element-content", recursive=False)
+    if root is None:
+        raise Exception("No class info found")
 
-            # print(clName)
-            for p in content.findChildren("p", recursive=False) or ():
-                # classDoc.append(md.handleDocString(p))
-                pass
-            notes = element.findChild("div", "notes", recursive=False)
-            if notes:
-                for note in notes.findChildren("div", "note", recursive=False):
-                    # classDoc.append(md.handleDocString(note))
-                    pass
+    hasChildren = False
+    for e in root.children:
+        hasChildren = True
+        if isinstance(e, str):
+            classDoc.append(e)
         else:
-            print("no content")
+            if e.name == "p":
+                classDoc.append(md.handleDocString(e))
+            elif e.name == "ul":
+                classDoc.append(md.handleDocString(e, isList=True, listChar=0, sep=md.lineBreak))
+            elif e.name == "div":
+                classes = e.get("class")
+                if classes:
+                    if "example" in classes:
+                        classDoc.append(md.handleDocString(e))
+                    elif "notes" in classes:
+                        classDoc.append(md.handleDocString(e))
+                    elif "element" in classes:
+                        #print("element", e.get("id"))
+                        pass
+                    else:
+                        print("Unknown div class", classes)
+                else:
+                    print("Div does not have a class")
+            else:
+                print("Unknown element", e.name)
+    if not hasChildren:
+        print("No description", className)
+    return classDoc
 
+def parseShortDescription(soup, clName):
+    shortDescriptions = {}
     hasValid = False
     hasHelp = False
-
-    shortDescriptions = {}
-
-    for tr in soup.find("div", "brief-listing", id = clName + ".brief").findChild("table", recursive = False).findChildren("tr", recursive = False):
+    table = soup.find("div", "brief-listing", id = clName + ".brief").findChild("table", recursive = False)
+    for tr in table.findChildren("tr", recursive = False):
         nameSpan = tr.findChild("td", "header").findChild("span", "element-name", recursive = False)
         anchorNode = nameSpan.findChild("a", recursive = False)
 
@@ -147,17 +116,118 @@ def _parseClass(clazz, soup, context):
             else:
                 shortDescriptions[name] = md.handleDocString(tr.findChild("td", "description", recursive = False))
                 t = shortDescriptions[name]
-                if t:
-                    #print(t)
-                    pass
+    return hasHelp, hasValid, shortDescriptions
+
+def parseParameter(parentElement, context):
+    argName = parentElement.findChild("span", "param-name").get_text(strip = True)
+    parameterType = None
+    typeNode = parentElement.findChild("span", "param-type")
+    if typeNode:
+        parameterType = getReturnTypes(tuple(typeNode.children), context)
+    else:
+        parameterType = "any"
+        # TODO: temporary workaround
+    parameterDoc = parse_attribute_doc(parentElement)
+    if parameterDoc:
+        # TODO: fix this
+        # It seems that beautifulsoup returns a string containing new lines so they must be removed
+        # An example is LuaBootstrap.on_event f parameter's description
+        parameterDoc = " ".join(map(lambda x: x.replace("\n", " "), filter(lambda x: x, parameterDoc)))
+    parameter = Parameter(
+        name = argName,
+        type = parameterType,
+        desc = parameterDoc)
+    return parameter
+
+def parseField(row, modeNode, context):
+    elementContent = row.findChild("div", "element-content", recursive = False)
+    attributeDoc = []
+    if elementContent:
+        attributeDoc.append(md.handleDocString(elementContent))
+        # print(1, doc[-1])
+    typeNode = row.findChild("span", "attribute-type")
+    if typeNode:
+        attributeType = getReturnTypes(tuple(typeNode.findChild("span", "param-type").children), context)
+    else:
+        # TODO: temporary workaround
+        attributeType = "any"
+    modeString = modeTranslation[modeNode.get_text(strip = True)]
+    tempDoc = " ".join(filter(lambda x: x, attributeDoc))
+    attribute = Attribute(
+        desc = tempDoc,
+        mod = modeString,
+        type = attributeType)
+    return attribute
+
+def parseMethod(row, context):
+    returnDesc = None
+    returnType = None
+    attributeDoc = []
+    args = {}
+    elementContent = row.findChild("div", "element-content", recursive = False)
+    attributeDoc.append(md.handleDocString(elementContent, maxDepth = 1))
+    returnSpan = row.findChild("span", "return-type")
+    if returnSpan:
+        pt = returnSpan.findChild("span", "param-type", recursive = False)
+        returnType = getReturnTypes(tuple(pt.children), context)
+    returnValueDetailFound = False
+    for detail in elementContent.findChildren("div", "detail", recursive = False) or ():
+        header = detail.findChild("div", "detail-header")
+        if header is None:
+            # TODO: check where this happens
+            attributeDoc.append(md.handleDocString(detail))
+            continue
+
+        headerText = header.get_text(strip = True)
+
+        if headerText == "Parameters":
+            # doc.append(md.strong(headerText))
+            dc = detail.find("div", "detail-content")
+            count = 0
+            for div in dc.findChildren("div", recursive = False):
+                count += 1
+                if not div.findChild("span", "param-name"):
+                    continue
+                parameter = parseParameter(div, context)
+                args[parameter.name] = parameter
+        elif headerText == "Return value":
+            returnValueDetailFound = True
+            returnDesc = md.handleDocString(header.find_next_sibling("div", "detail-content"))
+        elif headerText == "See also":
+            attributeDoc.append(md.strong(headerText))
+            attributeDoc.append(md.handleDocString(detail))
+        else:
+            raise Exception("Unknown headerText: " + headerText)
+    if not returnValueDetailFound:
+        # print(returnType)
+        pass
+    tempDoc = " ".join(filter(lambda x: x, attributeDoc))
+    returnObject = None
+    if returnType:
+        returnObject = Attribute(
+            type = returnType,
+            desc = returnDesc)
+    return FunctionObject(
+        desc = tempDoc,
+        returnObject = returnObject,
+        parameters = args)
+
+def _parseClass(clazz, soup, context):
+    clName = clazz.name
+    context.breadcrumbs.append(clName)
+    #print(clName)
+
+    attributeRe = re.compile(clName + "\\.\\w+")
+    element = soup.find("div", "element", id = clName)
+
+    classDoc = parseDescription(soup, element, clName)
+
+    hasHelp, hasValid, shortDescriptions = parseShortDescription(soup, clName)
 
     attributes = OrderedDict()
     #addCommonAttributes(attributes, context, hasHelp, hasValid)
 
     for row in element.findChildren("div", "element", id = attributeRe):
-        args = {}
-        attributeDoc = []
-
         name = row.findChild("span", "element-name").get_text(strip = True)
         match = bracketRe.search(name)
         if match:
@@ -165,110 +235,15 @@ def _parseClass(clazz, soup, context):
 
         context.breadcrumbs.append(name)
 
-        returnDesc = None
-        modeString = None
-
-        returnType = None
-        attributeType = None
-
-        elementContent = row.findChild("div", "element-content", recursive = False)
-
         modeNode = row.find("span", "attribute-mode")
         if modeNode:
-            typeNode = row.findChild("span", "attribute-type")
-            if elementContent:
-                attributeDoc.append(md.handleDocString(elementContent))
-                #print(1, doc[-1])
-            if typeNode:
-                attributeType = getReturnTypes(tuple(typeNode.findChild("span", "param-type").children), context)
-            else:
-                #TODO: temporary workaround
-                attributeType = "any"
-            modeString = modeTranslation[modeNode.get_text(strip = True)]
+            attribute = parseField(row, modeNode, context)
+            attribute.name = name
+            attribute.shortDesc = shortDescriptions.get(name)
         else:
-            attributeDoc.append(md.handleDocString(elementContent, maxDepth = 1))
-            returnSpan = row.findChild("span", "return-type")
-            if returnSpan:
-                pt = returnSpan.findChild("span", "param-type", recursive = False)
-                if name == "calculate_tile_properties":
-                    #print("asd")
-                    #Just for testing
-                    pass
-                returnType = getReturnTypes(tuple(pt.children), context)
-
-            returnValueDetailFound = False
-            for detail in elementContent.findChildren("div", "detail", recursive = False) or ():
-                header = detail.findChild("div", "detail-header")
-                if header is None:
-                    #TODO: check where this happens
-                    attributeDoc.append(md.handleDocString(detail))
-                    continue
-
-                headerText = header.get_text(strip = True)
-
-                if headerText == "Parameters":
-                    #doc.append(md.strong(headerText))
-                    dc = detail.find("div", "detail-content")
-                    count = 0
-                    for div in dc.findChildren("div", recursive = False):
-                        count += 1
-                        if not div.findChild("span", "param-name"):
-                            continue
-
-                        argName = div.findChild("span", "param-name").get_text(strip = True)
-                        parameterType = None
-                        typeNode = div.findChild("span", "param-type")
-                        if typeNode:
-                            parameterType = getReturnTypes(tuple(typeNode.children), context)
-                        else:
-                            parameterType = "any"
-                            #TODO: temporary workaround
-
-                        parameterDoc = parse_attribute_doc(div)
-
-                        if parameterDoc:
-                            #TODO: fix this
-                            #It seems that beautifulsoup returns a string containing new lines so they must be removed
-                            #An example is LuaBootstrap.on_event f parameter description
-                            parameterDoc = " ".join(map(lambda x: x.replace("\n", " "), filter(lambda x: x, parameterDoc)))
-
-                        args[argName] = Parameter(
-                            name = argName,
-                            type = parameterType,
-                            desc = parameterDoc)
-                elif headerText == "Return value":
-                    returnValueDetailFound = True
-                    returnDesc = md.handleDocString(header.find_next_sibling("div", "detail-content"))
-                elif headerText == "See also":
-                    attributeDoc.append(md.strong(headerText))
-                    attributeDoc.append(md.handleDocString(detail))
-                else:
-                    raise Exception("Unknown headerText: " + headerText)
-            if not returnValueDetailFound:
-                #print(returnType)
-                pass
-
-        if modeNode:
-            tempDoc = " ".join(filter(lambda x: x, attributeDoc))
-            attribute = Attribute(
-                name = name,
-                shortDesc = shortDescriptions.get(name),
-                desc = tempDoc,
-                mod = modeString,
-                type = attributeType)
-        else:
-            tempDoc = " ".join(filter(lambda x: x, attributeDoc))
-            returnObject = None
-            if returnType:
-                returnObject = Attribute(
-                    type = returnType,
-                    desc = returnDesc)
-            attribute = FunctionObject(
-                name = name,
-                shortDesc = shortDescriptions.get(name),
-                desc = tempDoc,
-                returnObject = returnObject,
-                parameters = args)
+            attribute = parseMethod(row, context)
+            attribute.name = name
+            attribute.shortDesc = shortDescriptions.get(name)
 
         attributes[name] = attribute
         context.breadcrumbs.pop()
@@ -312,9 +287,9 @@ def main():
     from retriever import SourceRetriever
     retriever = SourceRetriever(
         baseURL,
-        useCached=True,
-        cacheDir=cacheDir,
-        suffix=suffix)
+        useCached = True,
+        cacheDir = cacheDir,
+        suffix = suffix)
     context = Context(retriever)
     co = ClassObject(
         name = className,

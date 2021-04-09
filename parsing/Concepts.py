@@ -89,7 +89,7 @@ def _parseConcepts(soup, context):
 
 
             previousText = md.lineBreak.join(previousText)
-            if previousText in ("Members:", "Table with the following fields:", "A table:"):
+            if previousText in ("Members:", "Table with the following fields:", "A table:") or "Table with the following fields:" in previousText:
                 classDoc.append(previousText)
                 attributes = []
                 for li in fieldList.children:
@@ -125,16 +125,18 @@ def _parseConcepts(soup, context):
                     conceptTypes[className] = alias
                     pass
                 else:
+                    classDoc.append(previousText)
                     #print(className)
                     #TODO: handle Resistances type
                     #print(previous)
                     #print(dir(fieldList))
                     classDoc.append(previousText)
                     #TODO: do
-            elif "Table with the following fields:" in previousText:
-                #TODO: do
-                #TODO: handle AutoplaceSpecification
-                pass
+            # elif  in previousText:
+            #     #TODO: do
+            #     #TODO: handle AutoplaceSpecification
+            #     print(className, clazz.desc is None, clazz.shortDesc is None)
+            #     pass
             elif "Members:" in previousText:
                 #print(className, previousText)
                 pass

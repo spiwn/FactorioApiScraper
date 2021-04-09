@@ -119,15 +119,24 @@ def parseShortDescription(soup, clName):
     return hasHelp, hasValid, shortDescriptions
 
 def parseParameter(parentElement, context):
-    argName = parentElement.findChild("span", "param-name").get_text(strip = True)
+    paramNameSpan = parentElement.findChild("span", "param-name", recursive = False)
+    if not paramNameSpan:
+        return None
+    argName = paramNameSpan.get_text(strip = True)
     parameterType = None
-    typeNode = parentElement.findChild("span", "param-type")
+    typeNode = parentElement.findChild("span", "param-type", recursive = False)
     if typeNode:
+        if argName == "peaks":
+            print("peaks")
         parameterType = getReturnTypes(tuple(typeNode.children), context)
     else:
         parameterType = "any"
         # TODO: temporary workaround
-    parameterDoc = parse_attribute_doc(parentElement)
+    fieldListNode = parentElement.findChild("ul", "field-list", recursive = False)
+    parameterDoc = parse_attribute_doc(parentElement, fieldListNode)
+    if fieldListNode:
+        pass
+
     if parameterDoc:
         # TODO: fix this
         # It seems that beautifulsoup returns a string containing new lines so they must be removed
@@ -159,11 +168,24 @@ def parseField(row, modeNode, context):
         type = attributeType)
     return attribute
 
+nameRe = re.compile("(?P<name>\w+)\s*(?P<bracket>\{|\()(?P<signature>.+?)(?:→(?P<returnType>.+))?")
+
 def parseMethod(row, context):
     returnDesc = None
     returnType = None
+    parametersAsTable = False
     attributeDoc = []
-    args = {}
+    args = OrderedDict()
+    elementHeader = row.findChild("div", "element-header", recursive = False)
+    nameNode = elementHeader.findChild("span", "element-name", recursive = False)
+    methodName = nameNode.get_text(strip = True)
+    nameMatch = nameRe.match(methodName)
+    methodName = nameMatch.group("name")
+    openingBracket = nameMatch.group("bracket")
+    if nameMatch:
+        #print(nameMatch.group("bracket"))
+        pass
+    #print(name, callSignature)
     elementContent = row.findChild("div", "element-content", recursive = False)
     attributeDoc.append(md.handleDocString(elementContent, maxDepth = 1))
     returnSpan = row.findChild("span", "return-type")
@@ -171,6 +193,7 @@ def parseMethod(row, context):
         pt = returnSpan.findChild("span", "param-type", recursive = False)
         returnType = getReturnTypes(tuple(pt.children), context)
     returnValueDetailFound = False
+    additionalTypes = []
     for detail in elementContent.findChildren("div", "detail", recursive = False) or ():
         header = detail.findChild("div", "detail-header")
         if header is None:
@@ -186,9 +209,40 @@ def parseMethod(row, context):
             count = 0
             for div in dc.findChildren("div", recursive = False):
                 count += 1
-                if not div.findChild("span", "param-name"):
-                    continue
-                parameter = parseParameter(div, context)
+                if not div.findChild("span", "param-name", recursive = False):
+                    if not list(div.children):
+                        continue
+
+                    fieldListNode = div.findChild("ul", "field-list", recursive = False)
+                    doc = parse_attribute_doc(div, fieldListNode)
+                    if len(doc) == 1 and "Table with the following fields" == doc[0]:
+                        parametersAsTable = True
+                        #print(context.breadcrumbs)
+                    elif openingBracket == '{':
+                        parametersAsTable = True
+                    else:
+                        print(methodName)
+                    subParameters = OrderedDict()
+                    for li in fieldListNode.findChildren("li", recursive = False):
+                        parameter = parseParameter(li, context)
+                        if parameter:
+                            subParameters[parameter.name] = parameter
+
+                    if parametersAsTable:
+                        dummyClass = ClassObject(
+                            name = context.clazz + methodName + "_param",
+                            attributes = subParameters,
+                            flags = Flags.Dummy)
+                        additionalTypes.append(dummyClass)
+                        desc = None
+                        if doc:
+                            desc = " ".join(map(lambda x: x.replace("\n", " "), filter(lambda x: x, doc)))
+                        parameter = Parameter(
+                            name = dummyClass.name[0].lower() + dummyClass.name[1:],
+                            type = dummyClass.name,
+                            desc = desc)
+                else:
+                    parameter = parseParameter(div, context)
                 args[parameter.name] = parameter
         elif headerText == "Return value":
             returnValueDetailFound = True
@@ -207,14 +261,18 @@ def parseMethod(row, context):
         returnObject = Attribute(
             type = returnType,
             desc = returnDesc)
-    return FunctionObject(
+    functionObject = FunctionObject(
         desc = tempDoc,
         returnObject = returnObject,
         parameters = args)
+    if additionalTypes:
+        functionObject.additionalTypes = additionalTypes
+    return functionObject
 
 def _parseClass(clazz, soup, context):
     clName = clazz.name
     context.breadcrumbs.append(clName)
+    context.clazz = clName
     #print(clName)
 
     attributeRe = re.compile(clName + "\\.\\w+")
@@ -283,7 +341,8 @@ def parse_class(className, soupObject, context):
 
 def main():
     #className = "LuaSurface"
-    className = "LuaBootstrap"
+    #className = "LuaBootstrap"
+    className = "LuaControl"
     from retriever import SourceRetriever
     retriever = SourceRetriever(
         baseURL,

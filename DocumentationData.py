@@ -107,6 +107,7 @@ class Parameter(Attribute, metaclass = DataMeta):
 class FunctionObject(DocObject, metaclass = DataMeta):
     parameters = None
     returnObject = None
+    additionalTypes = None
     def __init__(self, **kwargs):
         pass
 
@@ -117,6 +118,7 @@ class ClassObject(DocObject, metaclass = DataMeta):
     flags = lambda: Flags(0)
     #TODO: Rename
     _attributes = ("attributes", "inherits", "flags", "parents")
+
     def __init__(self, **kwargs):
         pass
 

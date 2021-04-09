@@ -69,6 +69,53 @@ def writeObjectType(objectType, w):
         return
     raise Exception("Unknown object type: " + objectType.type)
 
+def writeFunctionObject(functionObject, escapedName, w):
+    w.write("\n")
+
+    if functionObject.additionalTypes:
+        for clazz in functionObject.additionalTypes:
+            writeClass(clazz, w)
+            w.write("\n")
+
+    writeFullDesc(functionObject.shortDesc, functionObject.desc, w)
+    w.write("---\n")
+    if functionObject.parameters:
+        for _, parameter in functionObject.parameters.items():
+            w.write("---@param ")
+            w.write(parameter.name)
+            if parameter.optional:
+                w.write("?")
+            w.write(" ")
+            writeObjectType(parameter.type, w)
+            if parameter.desc or parameter.shortDesc:
+                w.write(" ")
+                w.write(parameter.desc or parameter.shortDesc)
+            w.write("\n")
+            w.write("---\n")
+    returnObject = functionObject.returnObject
+    if returnObject:
+        if not isinstance(returnObject, str) and functionObject.returnObject.desc:
+            writeDesc(functionObject.returnObject.desc, w)
+        w.write("---@return ")
+        if isinstance(returnObject, str):
+            # TODO: all returnObjects should be instances of Attribute?
+            w.write(returnObject)
+        else:
+            writeObjectType(functionObject.returnObject.type, w)
+        w.write("\n")
+    w.write(escapedName)
+    w.write(".")
+    w.write(functionObject.name)
+    w.write(" = function(")
+    if functionObject.parameters:
+        count = 0
+        for _, parameter in functionObject.parameters.items():
+            if count > 0:
+                w.write(", ")
+            w.write(parameter.name)
+            count += 1
+    w.write(") end\n")
+
 def writeClass(clazz, w):
     escapedName = escapeName(clazz.name)
     writeFullDesc(clazz.shortDesc, clazz.desc, w)
@@ -108,45 +155,8 @@ def writeClass(clazz, w):
         for k, attribute in clazz.attributes.items():
             if not isinstance(attribute, FunctionObject):
                 continue
-            w.write("\n")
-            writeFullDesc(attribute.shortDesc, attribute.desc, w)
-            w.write("---\n")
-            if attribute.parameters:
-                for _, parameter in attribute.parameters.items():
-                    w.write("---@param ")
-                    w.write(parameter.name)
-                    if parameter.optional:
-                        w.write("?")
-                    w.write(" ")
-                    writeObjectType(parameter.type, w)
-                    if parameter.desc or parameter.shortDesc:
-                        w.write(" ")
-                        w.write(parameter.desc or parameter.shortDesc)
-                    w.write("\n")
-                    w.write("---\n")
-            returnObject = attribute.returnObject
-            if returnObject:
-                if not isinstance(returnObject, str) and attribute.returnObject.desc:
-                    writeDesc(attribute.returnObject.desc, w)
-                w.write("---@return ")
-                if isinstance(returnObject, str):
-                    #TODO: all returnObjects should be instances of Attribute
-                    w.write(returnObject)
-                else:
-                    writeObjectType(attribute.returnObject.type, w)
-                w.write("\n")
-            w.write(escapedName)
-            w.write(".")
-            w.write(attribute.name)
-            w.write(" = function(")
-            if attribute.parameters:
-                count = 0
-                for _, parameter in attribute.parameters.items():
-                    if count > 0:
-                        w.write(", ")
-                    w.write(parameter.name)
-                    count += 1
-            w.write(") end\n")
+            writeFunctionObject(attribute, escapedName, w)
+
 
 def writeSingleDefine(define, w, prefix):
     escapedName = escapeName(define.name)

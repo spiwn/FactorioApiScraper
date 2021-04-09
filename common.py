@@ -55,3 +55,9 @@ class Context:
         self.globalClasses = OrderedDict()
         self.commonEventParameters = None
         self.breadcrumbs = []
+        self.clazz = None
+
+    def clear_transient(self):
+        del self.breadcrumbs
+        del self.retriever
+        del self.clazz

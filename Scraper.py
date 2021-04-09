@@ -69,7 +69,7 @@ def scrape(retriever):
 
 
 def store_intermediate(context, outputDirPath):
-    del context.retriever
+    context.clear_transient()
     import pickle
     with open(outputDirPath.joinpath("context.txt"), 'wb') as w:
         pickle.dump(context, w)

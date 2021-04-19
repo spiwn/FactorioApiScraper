@@ -162,9 +162,9 @@ def parseField(row, modeNode, context):
         attributeType = "any"
     modeString = modeTranslation[modeNode.get_text(strip = True)]
     tempDoc = " ".join(filter(lambda x: x, attributeDoc))
-    attribute = Attribute(
+    attribute = Field(
         desc = tempDoc,
-        mod = modeString,
+        mode = modeString,
         type = attributeType)
     return attribute
 

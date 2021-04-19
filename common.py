@@ -35,7 +35,8 @@ def clear_cache(cacheDirParam):
 _argParser = argparse.ArgumentParser()
 _argParser.add_argument("-c", "--cache", type = str, help ="Specify a folder to use as a cache", action ="store")
 _argParser.add_argument("--clear", help ="remove previously saved html files", action ="store_true")
-_argParser.add_argument("--intermediate", help ="store the intermediate representation", action ="store_true")
+_argParser.add_argument("--intermediate", help ="store the intermediate representation as a file", action ="store_true")
+_argParser.add_argument("--json", help ="write the intermediate representation as json to a file", action ="store_true")
 _argParser.add_argument("--skip_generation", help ="skip generating the output", action ="store_true")
 arguments = _argParser.parse_args()
 arguments.cache = arguments.cache or "cached"
@@ -61,3 +62,6 @@ class Context:
         del self.breadcrumbs
         del self.retriever
         del self.clazz
+
+    def toJson(self):
+        return {k : self.__dict__[k] for k in ('conceptTypes', 'classes', 'defines', 'commonClassAttributes', 'commonClasses', 'globalClasses', 'commonEventParameters')}

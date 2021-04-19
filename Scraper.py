@@ -74,6 +74,11 @@ def store_intermediate(context, outputDirPath):
     with open(outputDirPath.joinpath("context.txt"), 'wb') as w:
         pickle.dump(context, w)
 
+def write_json(context, outputDirPath):
+    import json
+    with open(outputDirPath.joinpath("context.json"), 'w') as w:
+        json.dump(context, w, indent = 2, default = lambda x: x if not hasattr(x, 'toJson') else x.toJson())
+
 def go():
     context = scrape(SourceRetriever(
         baseURL,
@@ -86,6 +91,9 @@ def go():
 
     if arguments.intermediate:
         store_intermediate(context, outputDirPath)
+
+    if arguments.json:
+        write_json(context, outputDirPath)
 
     if not arguments.skip_generation:
         DocFormatter.formatDocumentation(context, outputDirPath)

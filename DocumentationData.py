@@ -117,6 +117,8 @@ class Field(Attribute, metaclass = DataMeta):
     def toJson(self):
         result = self._toJson()
         result['attribute_type'] = 'field'
+        if 'optional' in result:
+            result.pop('optional')
         return result
 
 class Parameter(Attribute, metaclass = DataMeta):
@@ -136,6 +138,8 @@ class FunctionObject(DocObject, metaclass = DataMeta):
     def toJson(self):
         result = self._toJson()
         result['attribute_type'] = 'function'
+        if 'optional' in result:
+            result.pop('optional')
         return result
 
 class ClassObject(DocObject, metaclass = DataMeta):
@@ -167,5 +171,11 @@ class ClassObject(DocObject, metaclass = DataMeta):
 
 class AliasType(DocObject, metaclass = DataMeta):
     type = None
+    _attributes = ("type",)
     def __init(self, **kwargs):
         pass
+    def toJson(self):
+        result = self._toJson()
+        #TODO: better name
+        result['attribute_type'] = "AliasType"
+        return result

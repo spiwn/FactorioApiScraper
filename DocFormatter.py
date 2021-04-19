@@ -179,7 +179,7 @@ def writeSingleDefine(define, w, prefix):
     w.write(escapedName)
 
     if isinstance(define, DefinesGroup) and define.defines:
-        w.write(' = "{}"\n')
+        w.write(' = {}\n')
         newPrefix = prefix + define.name + "."
         for child in define.defines.values():
             writeSingleDefine(child, w, newPrefix)

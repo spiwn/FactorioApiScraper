@@ -133,9 +133,12 @@ def writeClass(clazz, w):
 
     w.write("\n")
 
+    hasMethods = False
+
     if clazz.attributes:
         for k, attribute in clazz.attributes.items():
             if isinstance(attribute, FunctionObject):
+                hasMethods = True
                 continue
             w.write("---\n")
             writeFullDesc(attribute.shortDesc, attribute.desc, w)
@@ -146,12 +149,17 @@ def writeClass(clazz, w):
             writeObjectType(attribute.type, w)
             w.write("\n")
 
-    #maybe the local variable name has a prefix
-    w.write("local ")
-    w.write(escapedName)
-    w.write(" = {}\n")
+    if not hasMethods and not clazz.attributes and not clazz.parents and not clazz.desc and not clazz.shortDesc:
+        #print("What it is my purpose?: ", clazz.name)
+        pass
 
-    if clazz.attributes:
+    if hasMethods:
+
+        #maybe the local variable name has a prefix
+        w.write("local ")
+        w.write(escapedName)
+        w.write(" = {}\n")
+
         for k, attribute in clazz.attributes.items():
             if not isinstance(attribute, FunctionObject):
                 continue
@@ -160,6 +168,7 @@ def writeClass(clazz, w):
 
 def writeSingleDefine(define, w, prefix):
     escapedName = escapeName(define.name)
+
     if isinstance(define, Event):
         if define.contains:
             for clazz in define.contains:
@@ -168,41 +177,49 @@ def writeSingleDefine(define, w, prefix):
         else:
             print(define.name)
             raise Exception("Event with no parameters")
-    writeFullDesc(define.shortDesc, define.desc, w)
-
-    # if isinstance(define, Event):
-    #     w.write("---@param parameters ")
-    #     w.write(define.contains[-1].name)
-    #     w.write("\n")
+    else:
+        writeFullDesc(define.shortDesc, define.desc, w)
 
     w.write(prefix)
     w.write(escapedName)
 
-    if isinstance(define, DefinesGroup) and define.defines:
-        w.write(' = {}\n')
-        newPrefix = prefix + define.name + "."
-        for child in define.defines.values():
-            writeSingleDefine(child, w, newPrefix)
-        w.write("\n")
-    if isinstance(define, Event):
+    if isinstance(define, DefinesGroup):
+        if define.defines:
+            w.write(' = {\n')
+            #newPrefix = prefix + define.name + "."
+            newPrefix = prefix + "  "
+            for child in define.defines.values():
+                writeSingleDefine(child, w, newPrefix)
+            w.write(prefix)
+            w.write("}")
+            if define.name != "defines":
+                w.write(",")
+            w.write("\n")
+        else:
+            w.write(" = {},\n")
+    elif isinstance(define, Event):
         #w.write(' = function(parameters) end\n')
         #w.write(" = number\n")
         w.write(" = ")
-        w.write(escapedName)
+        #w.write(escapedName)
+        w.write("0,")
         w.write("\n")
     elif not isinstance(define, DefinesGroup):
         #w.write(' = "n/a"\n')
-        w.write(" = number\n")
+        w.write(" = 0,\n")
+    else:
+        raise Exception("Unknown value type in defines: ", type(DefinesGroup), define.name)
 
 def writeDefines(context, directory):
     with open(directory.joinpath("defines.lua"), 'w', encoding = encoding) as w:
         writeMetaHeader(w)
-        w.write("---@class defines\n")
-        w.write("defines = {}\n\n")
 
         writeClass(context.commonEventParameters, w)
+        w.write("\n")
 
         writeSingleDefine(context.defines, w, "")
+
+        w.write("\n")
         w.write("return defines\n")
 
 def writeClasses(context, directory):

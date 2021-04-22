@@ -6,6 +6,7 @@ from parsing.SingleClass import parse_class
 from parsing.Defines import parse_defines
 from parsing.Events import parse_events
 from parsing.Index import parse_index_page
+from parsing.BuiltinTypes import parse_builtin_types
 from common import *
 
 import DocFormatter
@@ -47,6 +48,7 @@ def scrape(retriever):
         commonURL,
         classesURL,
         definesURL,
+        builtinTypesURL,
         eventsURL,
         conceptsURL,
         indexURL]
@@ -58,6 +60,7 @@ def scrape(retriever):
 
     parse_common(context)
     parse_all_classes(context)
+    parse_builtin_types(context)
     parse_concepts(context)
     parseClasses(context)
     parse_defines(context)

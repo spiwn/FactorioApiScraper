@@ -3,6 +3,9 @@ from common import *
 
 encoding = "utf8"
 
+def openForWriting(directory, filename):
+    return open(directory.joinpath(filename), 'w', encoding=encoding)
+
 def escapeName(name):
     return name.replace(" ", "_")
 
@@ -211,7 +214,7 @@ def writeSingleDefine(define, w, prefix):
         raise Exception("Unknown value type in defines: ", type(DefinesGroup), define.name)
 
 def writeDefines(context, directory):
-    with open(directory.joinpath("defines.lua"), 'w', encoding = encoding) as w:
+    with openForWriting(directory, "defines.lua") as w:
         writeMetaHeader(w)
 
         writeClass(context.commonEventParameters, w)
@@ -226,21 +229,20 @@ def writeClasses(context, directory):
     classesDirPath = directory.joinpath("classes")
     classesDirPath.mkdir(parents = True, exist_ok = True)
 
-    parentClassesFilePath = classesDirPath.joinpath("Parents.lua")
-    with open(parentClassesFilePath, 'w', encoding = encoding) as w:
+    parentClassesFilePath = classesDirPath.joinpath()
+    with openForWriting(classesDirPath, "Parents.lua") as w:
         for _, clazz in context.commonClasses.items():
             writeClass(clazz, w)
             w.write("\n")
 
     for _, clazz in context.classes.items():
-        classFilePath = classesDirPath.joinpath(clazz.name + ".lua")
-        with open(classFilePath, 'w', encoding = encoding) as w:
+        with openForWriting(classesDirPath, clazz.name + ".lua") as w:
             writeMetaHeader(w)
             writeClass(clazz, w)
             w.write("\n")
 
 def writeGlobalClasses(context, directory):
-    with open(directory.joinpath("globalClasses.lua"), 'w', encoding = encoding) as w:
+    with openForWriting(directory, "globalClasses.lua") as w:
         for k, v in context.globalClasses.items():
             w.write("---@type ")
             w.write(v)
@@ -261,7 +263,7 @@ def writeAliasType(alias, w):
     pass
 
 def writeConceptTypes(context, directory):
-    with open(directory.joinpath("concepts.lua"), 'w', encoding = encoding) as w:
+    with openForWriting(directory, "concepts.lua") as w:
         writeMetaHeader(w)
         for k, v in context.conceptTypes.items():
             if isinstance(v, ClassObject):
@@ -274,11 +276,39 @@ def writeConceptTypes(context, directory):
         w.write("\n")
     pass
 
+def writeBuiltintypes(context, directory):
+    luaTypeMapping = {
+        'float' : 'number',
+        'double' : 'number',
+        'int' : 'integer',
+        'int8' : 'integer',
+        'uint' : 'integer',
+        'uint8' : 'integer',
+        'uint16' : 'integer',
+        'uint64' : 'integer',
+        'string' : 'string',
+        'boolean' : 'boolean',
+        'table' : 'table'
+    }
+
+    with openForWriting(directory, "builtinTypes.lua") as w:
+        writeMetaHeader(w)
+
+        for builtinType in context.builtinTypes.values():
+            writeFullDesc(builtinType.shortDesc, builtinType.desc, w)
+            w.write("---@alias ")
+            w.write(builtinType.name)
+            w.write(" ")
+            w.write(luaTypeMapping.get(builtinType.name, 'any'))
+            w.write("\n\n")
+
+
 def formatDocumentation(context : Context, directory):
     writeDefines(context, directory)
     writeClasses(context, directory)
     writeConceptTypes(context, directory)
     writeGlobalClasses(context, directory)
+    writeBuiltintypes(context, directory)
     print(counter)
 
 def main():
@@ -287,7 +317,6 @@ def main():
     __outputDirPath.mkdir(parents=True, exist_ok=True)
     with open(__outputDirPath.joinpath("context.txt"), 'rb') as r:
         formatDocumentation(pickle.load(r), __outputDirPath)
-
     print("Done")
 
 if __name__ == "__main__":

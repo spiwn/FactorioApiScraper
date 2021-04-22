@@ -19,6 +19,7 @@ eventsURL = "events.html"
 commonURL = "Common.html"
 conceptsURL = "Concepts.html"
 indexURL = "index.html"
+builtinTypesURL = "Builtin-Types.html"
 
 modeTranslation = {
     "[Read-only]" : "[R]",
@@ -47,7 +48,6 @@ if arguments.clear:
 
 class Context:
     def __init__(self, retriever):
-        self.retriever = retriever
         self.conceptTypes = OrderedDict()
         self.classes = OrderedDict()
         self.defines = DefinesGroup(name = "defines")
@@ -55,6 +55,9 @@ class Context:
         self.commonClasses = OrderedDict()
         self.globalClasses = OrderedDict()
         self.commonEventParameters = None
+        self.builtinTypes = OrderedDict()
+
+        self.retriever = retriever
         self.breadcrumbs = []
         self.clazz = None
 
@@ -64,4 +67,13 @@ class Context:
         del self.clazz
 
     def toJson(self):
-        return {k : self.__dict__[k] for k in ('conceptTypes', 'classes', 'defines', 'commonClassAttributes', 'commonClasses', 'globalClasses', 'commonEventParameters')}
+        attributes = (
+            'conceptTypes',
+            'classes',
+            'defines',
+            'commonClassAttributes',
+            'commonClasses',
+            'globalClasses',
+            'commonEventParameters',
+            'builtinTypes')
+        return {k : self.__dict__[k] for k in attributes}

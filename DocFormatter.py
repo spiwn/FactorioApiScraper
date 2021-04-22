@@ -1,13 +1,16 @@
-from pathlib import Path
 from common import *
+import re
 
 encoding = "utf8"
 
 def openForWriting(directory, filename):
     return open(directory.joinpath(filename), 'w', encoding=encoding)
 
+charsToReplaceRe = re.compile("[ .]")
+
 def escapeName(name):
-    return name.replace(" ", "_")
+    return charsToReplaceRe.sub("_", name)
+    #return name.replace(" ", "_")
 
 def writeMetaHeader(w):
     w.write("---@meta\n\n")
@@ -31,7 +34,7 @@ def writeObjectType(objectType, w):
     if objectType is None:
         w.write("any")
     if isinstance(objectType, str):
-        w.write(objectType)
+        w.write(escapeName(objectType))
         return
     if objectType.value is None and objectType.type is None:
         counter[3] += 1
@@ -45,8 +48,8 @@ def writeObjectType(objectType, w):
         if isinstance(objectType.value, list):
             writeObjectType(objectType.value[0], w)
         else:
-            #TODO: count and remove
-            writeObjectType(objectType.value, w)
+            #TODO: count and remove?
+            writeObjectType(escapeName(objectType.value), w)
         return
     if objectType.type == Types.Union:
         notFirst = False
@@ -169,7 +172,7 @@ def writeClass(clazz, w):
             writeFunctionObject(attribute, escapedName, w)
 
 
-def writeSingleDefine(define, w, prefix):
+def writeSingleDefine(define, w, prefix, indent = 0):
     escapedName = escapeName(define.name)
 
     if isinstance(define, Event):
@@ -182,18 +185,29 @@ def writeSingleDefine(define, w, prefix):
             raise Exception("Event with no parameters")
     else:
         writeFullDesc(define.shortDesc, define.desc, w)
+    if isinstance(define, DefinesGroup):
+        w.write(" " * indent)
+        w.write("---@class ")
+        w.write(escapeName(prefix + define.name))
+        w.write(" : table<string, integer>")
+        w.write("\n")
+        pass
 
-    w.write(prefix)
+    if define.name == "defines":
+        w.write("local ")
+
+    w.write(" " * indent)
     w.write(escapedName)
 
     if isinstance(define, DefinesGroup):
         if define.defines:
             w.write(' = {\n')
-            #newPrefix = prefix + define.name + "."
-            newPrefix = prefix + "  "
+            newPrefix = prefix + define.name + "."
+            #newPrefix = prefix + "  "
             for child in define.defines.values():
-                writeSingleDefine(child, w, newPrefix)
-            w.write(prefix)
+                writeSingleDefine(child, w, newPrefix, indent + 2)
+            #w.write(prefix)
+            w.write(" " * indent)
             w.write("}")
             if define.name != "defines":
                 w.write(",")
@@ -276,7 +290,7 @@ def writeConceptTypes(context, directory):
         w.write("\n")
     pass
 
-def writeBuiltintypes(context, directory):
+def writeBuiltinTypes(context, directory):
     luaTypeMapping = {
         'float' : 'number',
         'double' : 'number',
@@ -308,7 +322,7 @@ def formatDocumentation(context : Context, directory):
     writeClasses(context, directory)
     writeConceptTypes(context, directory)
     writeGlobalClasses(context, directory)
-    writeBuiltintypes(context, directory)
+    writeBuiltinTypes(context, directory)
     print(counter)
 
 def main():
